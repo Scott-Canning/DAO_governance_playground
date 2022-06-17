@@ -10,6 +10,8 @@ async function getBlockTimestamp() {
 
 async function main () {
     const interval = 14;
+    const timelockBlocks = 5;
+    const minDelay = interval * timelockBlocks;
     let blockNum = await ethers.provider.getBlockNumber();
     let block = await ethers.provider.getBlock(blockNum);
     let timestamp = block.timestamp;
@@ -33,7 +35,7 @@ async function main () {
     
     // Deploy timelock contract
     const Timelock = await ethers.getContractFactory("@openzeppelin/contracts/governance/TimelockController.sol:TimelockController");
-    const timelock = await Timelock.deploy(1, [], []);
+    const timelock = await Timelock.deploy((minDelay), [], []);
     await timelock.deployed();
 
     // Deploy governor contract
@@ -69,15 +71,15 @@ async function main () {
     const govTok_Signer1Balance = await govToken.balanceOf(signer1.address);
     const f_govTok_Signer1Balance = ethers.utils.formatUnits(govTok_Signer1Balance, 18);
 
-    console.log("   --------------------------------------------");
-    console.log("   GovToken: ", govToken.address);
-    console.log("   Governor: ", governor.address);
-    console.log("   TimeLock: ", timelock.address);
+    console.log("   /------------------------------------------------------\\");
+    console.log("   GovToken:    ", govToken.address);
+    console.log("   Governor:    ", governor.address);
+    console.log("   TimeLock:    ", timelock.address);
     console.log("   SourceToken: ", sourceToken.address);
-    console.log("   Governor SourceToken balance: ", ethers.utils.commify(f_srcTkn_GovBalance));
+    console.log("   Governor SourceToken balance:            ", ethers.utils.commify(f_srcTkn_GovBalance));
     console.log("   Signer2 SourceToken balance BEFORE vote: ", ethers.utils.commify(f_srcTkn_Signer2Balance));
-    console.log("   Signer1 GovToken balance: ", ethers.utils.commify(f_govTok_Signer1Balance)); 
-    console.log("   --------------------------------------------");
+    console.log("   Signer1 GovToken balance:                ", ethers.utils.commify(f_govTok_Signer1Balance)); 
+    console.log("   \\------------------------------------------------------/");
 
     // Signer 1 self-delegates voting power
     await govToken.delegate(signer1.address, { from: signer1.address })
@@ -99,9 +101,20 @@ async function main () {
                                             );
     const proposeReceipt = await proposeTx.wait(1);
     const proposalId = proposeReceipt.events[0].args.proposalId;
-    console.log("   *propose()*");
-            
+    const proposalSnapshot = ethers.BigNumber.from(await governor.proposalSnapshot(proposalId)).toString();
+    const proposalDeadline = ethers.BigNumber.from(await governor.proposalDeadline(proposalId)).toString();
+    const proposalThreshold = ethers.BigNumber.from(await governor.proposalThreshold()).toString();
+    const timelockMinDelay = (ethers.BigNumber.from(await timelock.getMinDelay()).toNumber() / interval).toString();
+    console.log("   blockNum: ", proposeTx.blockNumber, "   *propose()*");
+    console.log("   /------------------------------------------------------\\");
+    console.log("   Proposal Snapshot (block)  : ", proposalSnapshot);
+    console.log("   Proposal Deadline (block)  : ", proposalDeadline);
+    console.log("   Proposal Threshold         : ", proposalThreshold);
+    console.log("   Timelock Min Delay (blocks): ", timelockMinDelay);
+    console.log("   \\------------------------------------------------------/");
+
     /*
+        proposalId:
         The proposal id is produced by hashing the RLC encoded targets array, 
         the values array, the calldatas array and the descriptionHash (bytes32 
         which itself is the keccak256 hash of the description string). This
@@ -116,38 +129,7 @@ async function main () {
         order to execute the same operation twice (on the same governor) the 
         proposer will have to change the description in order to avoid proposal 
         id conflicts.
-    */
-    
-    // Advance time forward 1 block to allow voting
-    timestamp = await getBlockTimestamp();
-    let endTimestamp = timestamp + (votingDelay * interval)
-    while(timestamp <= endTimestamp) {
-        await ethers.provider.send('evm_increaseTime', [interval]);
-        await ethers.provider.send('evm_mine');
-        timestamp = await getBlockTimestamp();
-    }
-    
-    // Signer 1 votes
-    console.log("   *voteCast()*");
-    await governor.connect(signer1).castVote(proposalId, 1);
 
-    // Advance time forward 'votingPeriod' number of blocks
-    endTimestamp = timestamp + (votingPeriod * interval);
-    while(timestamp <= endTimestamp) {
-        await ethers.provider.send('evm_increaseTime', [interval]);
-        await ethers.provider.send('evm_mine');
-        timestamp = await getBlockTimestamp();
-    }
-    
-    // Gather proposal state information
-    let voteCount = await governor.proposalVotes(proposalId);
-    const [againstVotes, forVotes, abstainVotes] = voteCount;
-    let state = await governor.state(proposalId);
-    let proposalSnapshot = ethers.BigNumber.from(await governor.proposalSnapshot(proposalId)).toString();
-    let proposalDeadline = ethers.BigNumber.from(await governor.proposalDeadline(proposalId)).toString();
-    let proposalThreshold = ethers.BigNumber.from(await governor.proposalThreshold()).toString();
-
-    /*
         proposalSnapshot():
         Block number used to retrieve user’s votes and quorum. As per Compound’s Comp and 
         OpenZeppelin’s ERC20Votes, the snapshot is performed at the end of this block. 
@@ -157,33 +139,61 @@ async function main () {
         Block number at which votes close. Votes close at the end of this block, so it is 
         possible to cast a vote during this block.
     */
+    
+    // Advance time forward 'votingDelay' blocks to open voting period
+    let endTimestamp = timestamp + (votingDelay * interval)
+    while(timestamp <= endTimestamp) {
+        await ethers.provider.send('evm_increaseTime', [interval]);
+        await ethers.provider.send('evm_mine');
+        timestamp = await getBlockTimestamp();
+    }
+    
+    // Signer 1 votes
+    const castVoteTx = await governor.connect(signer1).castVote(proposalId, 1);
+    console.log("   blockNum: ", castVoteTx.blockNumber, "   *voteCast()*");
 
-    console.log("   --------------------------------------------");
+    // Advance time forward 'votingPeriod' blocks (-1 on castVote block increment)
+    endTimestamp = timestamp + ((votingPeriod - 1) * interval);
+    while(timestamp < endTimestamp) {
+        await ethers.provider.send('evm_increaseTime', [interval]);
+        await ethers.provider.send('evm_mine');
+        timestamp = await getBlockTimestamp();
+    }
+    
+    // Gather proposal state information
+    let voteCount = await governor.proposalVotes(proposalId);
+    const [againstVotes, forVotes, abstainVotes] = voteCount;
+    let state = await governor.state(proposalId);
+
+
+    console.log("   /------------------------------------------------------\\");
     console.log("   Against: ", ethers.utils.commify(ethers.utils.formatUnits(againstVotes, 18)),
                 "\n   For:     ", ethers.utils.commify(ethers.utils.formatUnits(forVotes, 18)),
                 "\n   Abstain: ", ethers.utils.commify(ethers.utils.formatUnits(abstainVotes, 18)));
     console.log("   State:   ", propState[state]);
-    console.log("   Proposal Snapshot: ", proposalSnapshot);
-    console.log("   Proposal Deadline: ", proposalDeadline);
-    console.log("   Proposal Threshold: ", proposalThreshold);
-    console.log("   --------------------------------------------");
+    console.log("   \\------------------------------------------------------/");
 
     // Queue proposal in timelock
     const descriptionHash = ethers.utils.id("Proposal #1: Give grant to signer 2");
-    console.log("   *queue()*");
-    await governor.queue([tokenAddress], [0], [transferCalldata], descriptionHash,);
-    await getBlockTimestamp()
+    const queueTx = await governor.queue([tokenAddress], [0], [transferCalldata], descriptionHash,);
+    console.log("   blockNum: ", queueTx.blockNumber, "   *queue()*");
+
+    // Advance block forward 'timelockBlocks'
+    endTimestamp = timestamp + (interval * timelockBlocks);
+    while(timestamp <= endTimestamp) {
+        await ethers.provider.send('evm_increaseTime', [interval]);
+        await ethers.provider.send('evm_mine');
+        timestamp = await getBlockTimestamp();
+    }
 
     // Execute proposal
-    console.log("   *execute()*");
-    await governor.execute([tokenAddress], [0],[transferCalldata], descriptionHash,);
-    await getBlockTimestamp()
+    const executeTx = await governor.execute([tokenAddress], [0],[transferCalldata], descriptionHash,);
+    console.log("   blockNum: ", executeTx.blockNumber, "   *execute()*");
 
     // Post-proposal execution balance
     srcTkn_Signer2Balance = await sourceToken.balanceOf(signer2.address);
     f_srcTkn_Signer2Balance = ethers.utils.formatUnits(srcTkn_Signer2Balance, 18);
     console.log("   Signer2 SourceToken balance AFTER vote: ", ethers.utils.commify(f_srcTkn_Signer2Balance));
-        
 };
 
 main()
