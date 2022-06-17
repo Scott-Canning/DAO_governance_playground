@@ -6,4 +6,4 @@
 npx hardhat run scripts/governing.js
 ```
 
-<img width="431" alt="image" src="https://user-images.githubusercontent.com/34758484/174387909-3c1baf2d-aec5-4f9b-99cb-ea6e360751e6.png">
+<img width="426" alt="image" src="https://user-images.githubusercontent.com/34758484/174388044-812bb05e-4f99-4e6d-9a06-0bc65a1ea1a0.png">
