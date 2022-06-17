@@ -1,4 +1,4 @@
-# Basic OpenZeppelin DAO Governor and TimelockController Implementation
+# Basic OpenZeppelin DAO Governor and TimelockController Testing Implementation
 
 ```shell
 npx hardhat run scripts/governing.js
