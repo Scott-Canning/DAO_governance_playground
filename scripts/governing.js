@@ -193,7 +193,9 @@ async function main () {
     // Post-proposal execution balance
     srcTkn_Signer2Balance = await sourceToken.balanceOf(signer2.address);
     f_srcTkn_Signer2Balance = ethers.utils.formatUnits(srcTkn_Signer2Balance, 18);
+    console.log("   /------------------------------------------------------\\");
     console.log("   Signer2 SourceToken balance AFTER vote: ", ethers.utils.commify(f_srcTkn_Signer2Balance));
+    console.log("   \\------------------------------------------------------/");
 };
 
 main()
