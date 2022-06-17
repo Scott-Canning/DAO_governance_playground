@@ -1,15 +1,9 @@
-# Basic Sample Hardhat Project
+# Basic OpenZeppelin DAO Governor and TimelockController Testing Implementation
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
-
-Try running some of the following tasks:
+<img width="636" alt="image" src="https://user-images.githubusercontent.com/34758484/174387832-a77791ba-425a-426a-9639-146506fa67a2.png">
 
 ```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-node scripts/sample-script.js
-npx hardhat help
+npx hardhat run scripts/governing.js
 ```
+
+<img width="407" alt="image" src="https://user-images.githubusercontent.com/34758484/174388184-aeb58e06-c748-4cae-825f-73c5097b3a0c.png">
